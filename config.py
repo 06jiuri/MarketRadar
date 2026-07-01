@@ -166,9 +166,9 @@ COINGECKO_API = "https://api.coingecko.com/api/v3"
 # ticker 备选（yfinance 某些 symbol 不稳定）
 # ============================================================
 TICKER_FALLBACKS = {
-    "ALI=F":       "JJU=F",
-    "CN10Y.BOND":  "CN10YT=RR",
-    "^JGB10Y":     "JP10YT=RR",
+    "ALI=F":       ["JJU=F"],
+    "CN10Y.BOND":  ["CN10YT=RR", "CN10Y", "CN10YT", "0#CN10Y"],
+    "^JGB10Y":     ["JP10YT=RR", "JP10YT"],
 }
 
 # ============================================================
