@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>{{ title }}</title>
+<style>
+  body {
+    margin: 0; padding: 0;
+    background-color: #e8e8e8;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+    color: {{ color_text }};
+    -webkit-font-smoothing: antialiased;
+  }
+  .container {
+    max-width: 640px; margin: 0 auto;
+    background: #ffffff;
+  }
+  .header {
+    background: {{ color_bg_header }};
+    padding: 28px 24px; text-align: center;
+  }
+  .header h1 {
+    margin: 0; font-size: 22px; color: #ffffff; font-weight: 700; letter-spacing: 1px;
+  }
+  .header .date {
+    margin-top: 6px; font-size: 13px; color: {{ color_text_light }};
+  }
+  .summary {
+    padding: 16px 24px;
+    font-size: 14px; line-height: 1.6;
+    color: {{ color_text }};
+    border-bottom: 1px solid #eee;
+    background: #fafafa;
+  }
+  .section {
+    padding: 20px 24px;
+    border-bottom: 1px solid #eee;
+  }
+  .section:last-child { border-bottom: none; }
+  .section-title {
+    font-size: 16px; font-weight: 700; color: {{ color_bg_header }};
+    margin: 0 0 12px 0; padding-bottom: 8px;
+    border-bottom: 2px solid {{ color_bg_header }};
+  }
+  table {
+    width: 100%; border-collapse: collapse; font-size: 13px;
+  }
+  thead th {
+    text-align: right; padding: 6px 8px;
+    font-weight: 500; color: {{ color_text_light }}; font-size: 11px;
+    border-bottom: 1px solid #e0e0e0;
+  }
+  thead th:first-child { text-align: left; }
+  tbody td {
+    padding: 8px 8px; text-align: right;
+    border-bottom: 1px solid #f0f0f0;
+  }
+  tbody td:first-child {
+    text-align: left; font-weight: 500;
+  }
+  .change-up   { color: {{ color_up }}; font-weight: 600; }
+  .change-down { color: {{ color_down }}; font-weight: 600; }
+  .change-flat { color: {{ color_unchanged }}; }
+  .position-bar {
+    display: inline-block; height: 4px; border-radius: 2px;
+    background: #e0e0e0; width: 60px; vertical-align: middle; margin-left: 6px;
+  }
+  .position-bar-inner {
+    height: 4px; border-radius: 2px;
+  }
+  .footer {
+    padding: 20px 24px; text-align: center;
+    font-size: 11px; color: #999;
+    background: {{ color_bg_section }};
+  }
+  .footer a { color: {{ color_bg_header }}; text-decoration: none; }
+  @media (max-width: 480px) {
+    .header h1 { font-size: 18px; }
+    table { font-size: 12px; }
+    thead th, tbody td { padding: 6px 4px; }
+    .section { padding: 14px 12px; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+
+  <!-- 头部 -->
+  <div class="header">
+    <h1>每日市场晨报</h1>
+    <div class="date">{{ date_str }}</div>
+  </div>
+
+  <!-- 一句话概述 -->
+  <div class="summary">
+    {{ summary | safe }}
+  </div>
+
+  {% macro render_table(items, show_position=True) %}
+  <table>
+    <thead>
+      <tr>
+        <th>名称</th>
+        <th>最新价</th>
+        <th>涨跌幅</th>
+        <th>52周位置</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for item in items %}
+      <tr>
+        <td>{{ item.name }}</td>
+        <td>{{ item.price_fmt }}</td>
+        <td class="{% if item.change_pct is not none and item.change_pct > 0 -%}change-up{%- elif item.change_pct is not none and item.change_pct < 0 -%}change-down{%- else -%}change-flat{%- endif %}">
+          {{ item.change_fmt }}
+        </td>
+        <td>
+          {% if item.pos_52w is not none %}
+          {{ "%.0f"|format(item.pos_52w) }}%
+          <span class="position-bar">
+            <span class="position-bar-inner" style="width:{{ item.pos_52w }}%; background:{{ color_bg_header }}; opacity:0.6;"></span>
+          </span>
+          {% else %}-{% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% endmacro %}
+
+  <!-- 三大指数 -->
+  <div class="section">
+    <div class="section-title">三大指数</div>
+    {{ render_table(indexes) }}
+  </div>
+
+  <!-- 美股七姐妹 -->
+  <div class="section">
+    <div class="section-title">美股七姐妹</div>
+    {{ render_table(mag7) }}
+  </div>
+
+  <!-- 半导体 -->
+  <div class="section">
+    <div class="section-title">半导体</div>
+    {{ render_table(semiconductors) }}
+  </div>
+
+  <!-- 商品期货 -->
+  <div class="section">
+    <div class="section-title">商品期货</div>
+    {{ render_table(commodities) }}
+  </div>
+
+  <!-- 加密货币 -->
+  <div class="section">
+    <div class="section-title">加密货币</div>
+    {{ render_table(cryptos) }}
+  </div>
+
+  <!-- 市场指标 -->
+  <div class="section">
+    <div class="section-title">市场指标</div>
+    {{ render_table(indicators) }}
+  </div>
+
+  <!-- 页脚 -->
+  <div class="footer">
+    每日自动发送 &middot; 数据来源: Yahoo Finance / CoinGecko<br>
+    数据可能存在延迟，仅供参考，不构成投资建议
+  </div>
+
+</div>
+</body>
+</html>
