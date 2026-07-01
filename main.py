@@ -1,6 +1,7 @@
 import os
 import sys
 import time
+import random
 import smtplib
 import logging
 from datetime import datetime
@@ -142,56 +143,96 @@ def sector_summary(items):
 # 数据获取
 # ============================================================
 
+def _try_history(sym, period):
+    """尝试拉取 history，失败返回 None"""
+    try:
+        return yf.download(sym, period=period, progress=False, auto_adjust=True)
+    except Exception:
+        return None
+
+
 def _fetch_one(sym):
-    ticker = yf.Ticker(sym)
-    info = ticker.info
-    hist = ticker.history(period="1mo")
+    info = {}
+    hist = None
+
+    # 初次尝试
+    try:
+        ticker = yf.Ticker(sym)
+        info = ticker.info
+        hist = ticker.history(period="1mo")
+    except Exception:
+        pass
+
+    # history 空则用 download 回退
+    if hist is None or len(hist) == 0:
+        hist = _try_history(sym, "1mo")
+    if hist is None or len(hist) == 0:
+        hist = _try_history(sym, "3mo")
 
     prev_close = info.get("regularMarketPreviousClose") or info.get("previousClose")
-    current = info.get("regularMarketPrice") or info.get("currentPrice")
+    current    = info.get("regularMarketPrice") or info.get("currentPrice")
     if prev_close is None and hist is not None and len(hist) >= 2:
-        prev_close = hist["Close"].iloc[-2]
+        prev_close = float(hist["Close"].iloc[-2])
     if current is None and hist is not None and len(hist) >= 1:
-        current = hist["Close"].iloc[-1]
+        current = float(hist["Close"].iloc[-1])
 
-    change_5d = calc_hist_return(hist, 5)
-    change_20d = calc_hist_return(hist, 20)
-    vol_ratio, vol_label = calc_volume_ratio(hist)
+    change_5d  = calc_hist_return(hist, 5) if hist is not None else None
+    change_20d = calc_hist_return(hist, 20) if hist is not None else None
+    vol_ratio, vol_label = calc_volume_ratio(hist) if hist is not None else (None, "-")
 
     return {
-        "price": current,
+        "price":      current,
         "prev_close": prev_close,
-        "high_52w": info.get("fiftyTwoWeekHigh"),
-        "low_52w": info.get("fiftyTwoWeekLow"),
-        "change_5d": change_5d,
+        "high_52w":   info.get("fiftyTwoWeekHigh"),
+        "low_52w":    info.get("fiftyTwoWeekLow"),
+        "change_5d":  change_5d,
         "change_20d": change_20d,
-        "vol_ratio": vol_ratio,
-        "vol_label": vol_label,
+        "vol_ratio":  vol_ratio,
+        "vol_label":  vol_label,
     }
 
 
 def fetch_yfinance_batch(symbols):
     result = {}
-    for sym in symbols:
-        try:
-            time.sleep(0.4)
-            result[sym] = _fetch_one(sym)
-        except Exception as e:
-            logger.warning("获取 %s 失败: %s", sym, e)
-            result[sym] = {
-                "price": None, "prev_close": None, "high_52w": None, "low_52w": None,
-                "change_5d": None, "change_20d": None, "vol_ratio": None, "vol_label": "-",
-            }
+    for i, sym in enumerate(symbols):
+        # 请求间隔 0.4-0.8s 随机抖动，避免被识别
+        delay = 0.4 + random.uniform(0, 0.4)
+        time.sleep(delay)
+
+        # 最多重试 3 次，指数退避
+        for attempt in range(3):
+            try:
+                result[sym] = _fetch_one(sym)
+                if result[sym].get("price") is not None:
+                    break
+            except Exception as e:
+                if attempt < 2:
+                    wait = (attempt + 1) * 1.5
+                    time.sleep(wait)
+                else:
+                    logger.warning("获取 %s 最终失败: %s", sym, e)
+                    result[sym] = {
+                        "price": None, "prev_close": None, "high_52w": None, "low_52w": None,
+                        "change_5d": None, "change_20d": None, "vol_ratio": None, "vol_label": "-",
+                    }
+        else:
+            logger.warning("获取 %s 所有重试均无数据", sym)
+
+        # 进度日志
+        if (i + 1) % 10 == 0:
+            logger.info("进度: %d/%d", i + 1, len(symbols))
     return result
 
 
 def apply_fallbacks(raw_data):
     for sym, fallback_list in TICKER_FALLBACKS.items():
         data = raw_data.get(sym, {})
-        if data.get("price") is not None and data["price"] != 0:
+        price_ok = data.get("price") is not None and data["price"] != 0
+        prev_ok = data.get("prev_close") is not None
+        if price_ok and prev_ok:
             continue
         for fb_sym in fallback_list:
-            logger.info("%s 无数据，尝试备选 %s", sym, fb_sym)
+            logger.info("%s 尝试备选 %s", sym, fb_sym)
             try:
                 time.sleep(0.3)
                 fb = _fetch_one(fb_sym)
