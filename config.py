@@ -168,7 +168,7 @@ COINGECKO_API = "https://api.coingecko.com/api/v3"
 TICKER_FALLBACKS = {
     "ALI=F":       ["JJU=F"],
     "CN10YT=RR":   ["CN10Y.BOND", "CN10YT", "511010.SS"],
-    "JP10YT=RR":   ["JP10YT", "JP10Y", "2821.T"],
+    "JP10YT=RR":   ["^JNGB10Y", "JP10YT", "JP10Y", "2821.T", "1349.T"],
     "^HSTECH":     ["3032.HK"],
     "000001.SS":   ["510050.SS"],
     "^N225":       ["EWJ"],
