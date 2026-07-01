@@ -190,7 +190,7 @@ TICKER_FALLBACKS = {
 # ============================================================
 # 贪婪指数
 # ============================================================
-FEAR_GREED_URL = "https://production.dataviz.cnn.io/index/fearandgreed/graphdata"
+FEAR_GREED_URL = "https://api.alternative.me/fng/?limit=1"
 
 # ============================================================
 # 邮件模板颜色
