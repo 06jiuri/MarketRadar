@@ -171,11 +171,16 @@ def fetch_fear_greed():
         resp = requests.get(FEAR_GREED_URL, headers={"User-Agent": "Mozilla/5.0"}, timeout=10)
         resp.raise_for_status()
         data = resp.json()
-        fg = data.get("fear_and_greed", data.get("fear_and_greed_now", {}))
-        score = fg.get("score")
-        rating = fg.get("rating", "")
+        item = data.get("data", [{}])[0]
+        score = item.get("value")
+        label_en = item.get("value_classification", "")
+        label_map = {
+            "Extreme Fear": "极度恐惧", "Fear": "恐惧", "Neutral": "中性",
+            "Greed": "贪婪", "Extreme Greed": "极度贪婪",
+        }
+        label = label_map.get(label_en, label_en)
         if score is not None:
-            return float(score), str(rating)
+            return float(score), label
     except Exception as e:
         logger.warning("贪婪指数获取失败: %s", e)
     return None, ""
@@ -475,7 +480,7 @@ def main():
             "name": f"贪婪指数({fg_rating})",
             "unit": "",
             "price": fg_score,
-            "price_fmt": f"{(fg_score*10):.0f} {fg_rating}",
+            "price_fmt": f"{fg_score:.0f} {fg_rating}",
             "change_pct": None, "change_fmt": "-",
             "change_5d": None, "change_5d_fmt": "-",
             "change_20d": None, "change_20d_fmt": "-",
