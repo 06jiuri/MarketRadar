@@ -1,6 +1,7 @@
 import os
 import sys
 import time
+import math
 import smtplib
 import logging
 from datetime import datetime
@@ -31,13 +32,30 @@ logger = logging.getLogger(__name__)
 # 工具函数
 # ============================================================
 
+def _isnan(v):
+    try:
+        return math.isnan(float(v))
+    except Exception:
+        return False
+
+
+def _clean(val):
+    """NaN → None"""
+    return None if _isnan(val) else val
+
+
 def safe_change_pct(current, prev):
+    current = _clean(current)
+    prev = _clean(prev)
     if current is not None and prev is not None and prev != 0:
         return round((current - prev) / prev * 100, 2)
     return None
 
 
 def safe_52w_position(price, low, high):
+    price = _clean(price)
+    low = _clean(low)
+    high = _clean(high)
     if price is not None and low is not None and high is not None and high > low:
         pos = (price - low) / (high - low) * 100
         return round(min(max(pos, 0), 100), 1)
@@ -45,6 +63,7 @@ def safe_52w_position(price, low, high):
 
 
 def fmt_price(val):
+    val = _clean(val)
     if val is None:
         return "-"
     if abs(val) >= 1000:
@@ -65,13 +84,16 @@ def fmt_change(pct):
 def calc_hist_return(hist, window):
     if hist is None or len(hist) < 2:
         return None
-    closes = hist["Close"]
-    if len(closes) >= window + 1:
-        start, end = closes.iloc[-(window + 1)], closes.iloc[-1]
-    else:
-        start, end = closes.iloc[0], closes.iloc[-1]
-    if start and start != 0:
-        return round((end - start) / start * 100, 2)
+    try:
+        closes = hist["Close"]
+        if len(closes) >= window + 1:
+            start, end = float(closes.iloc[-(window + 1)]), float(closes.iloc[-1])
+        else:
+            start, end = float(closes.iloc[0]), float(closes.iloc[-1])
+        if not _isnan(start) and not _isnan(end) and start != 0:
+            return round((end - start) / start * 100, 2)
+    except Exception:
+        pass
     return None
 
 
@@ -143,28 +165,49 @@ def sector_summary(items):
 # ============================================================
 
 def fetch_yfinance_batch(symbols):
-    """批量拉取：先一次性批量下载 history，再逐个获取 info"""
     result = {}
 
-    # 1. 批量下载所有标的的历史数据（1次请求 vs 68次）
-    logger.info("批量下载 %d 个标的的历史数据...", len(symbols))
-    all_hist = None
-    for batch_size in [40, 20, 10]:
-        try:
-            batch = symbols[:batch_size] if batch_size <= len(symbols) else symbols
-            all_hist = yf.download(" ".join(batch), period="1mo", group_by="ticker",
+    # 1. 分批下载历史数据，每批 12 个，覆盖全部标的
+    all_hist_map = {}
+    chunk = 12
+    for start in range(0, len(symbols), chunk):
+        batch = symbols[start:start + chunk]
+        s = start + 1
+        e = min(start + chunk, len(symbols))
+        logger.info("下载历史 %d-%d/%d (%d个)...", s, e, len(symbols), len(batch))
+        for attempt in range(3):
+            try:
+                ticker_str = " ".join(batch)
+                data = yf.download(ticker_str, period="1mo", group_by="ticker",
                                    progress=False, auto_adjust=True)
-            if all_hist is not None and not all_hist.empty:
-                logger.info("批量下载成功，batch=%d，行数=%d", batch_size, len(all_hist))
-                break
-        except Exception as e:
-            logger.warning("批量下载 batch=%d 失败: %s", batch_size, e)
-            all_hist = None
-            time.sleep(2)
+                if data is not None and not data.empty:
+                    # 拆分多标的 DataFrame
+                    tickers_in_data = []
+                    try:
+                        tickers_in_data = list(data.columns.get_level_values(0).unique())
+                    except Exception:
+                        if "Close" in data.columns:
+                            tickers_in_data = [batch[0]]
 
-    # 2. 逐标的需要 info，但从缓存 history 取 OHLCV
+                    for sym in tickers_in_data:
+                        try:
+                            sym_df = data[sym]
+                            if sym_df is not None and not sym_df.empty:
+                                all_hist_map[sym] = sym_df
+                        except Exception:
+                            pass
+                    logger.info("批次 %d-%d 成功，拿到 %d 个标的", s, e, len(tickers_in_data))
+                    break
+                else:
+                    logger.warning("批次 %d-%d 返回空，重试 %d/3", s, e, attempt + 1)
+                    time.sleep(2)
+            except Exception as ex:
+                logger.warning("批次 %d-%d 失败: %s，重试 %d/3", s, e, ex, attempt + 1)
+                time.sleep(3)
+
+    # 2. 逐个获取 info + 匹配 history
     for i, sym in enumerate(symbols):
-        time.sleep(0.15)
+        time.sleep(0.12)
         info = {}
         try:
             ticker = yf.Ticker(sym)
@@ -172,24 +215,14 @@ def fetch_yfinance_batch(symbols):
         except Exception:
             pass
 
-        # 从批量下载结果中取该标的 history
-        sym_hist = None
-        if all_hist is not None:
-            try:
-                if sym in all_hist.columns.get_level_values(0):
-                    sym_hist = all_hist[sym]
-                elif "Close" in all_hist.columns and sym in symbols[:1]:
-                    # 单标的情况
-                    sym_hist = all_hist
-            except Exception:
-                pass
+        sym_hist = all_hist_map.get(sym)
 
-        prev_close = info.get("regularMarketPreviousClose") or info.get("previousClose")
-        current    = info.get("regularMarketPrice") or info.get("currentPrice")
+        prev_close = _clean(info.get("regularMarketPreviousClose") or info.get("previousClose"))
+        current    = _clean(info.get("regularMarketPrice") or info.get("currentPrice"))
         if prev_close is None and sym_hist is not None and len(sym_hist) >= 2:
-            prev_close = float(sym_hist["Close"].iloc[-2])
+            prev_close = _clean(sym_hist["Close"].iloc[-2])
         if current is None and sym_hist is not None and len(sym_hist) >= 1:
-            current = float(sym_hist["Close"].iloc[-1])
+            current = _clean(sym_hist["Close"].iloc[-1])
 
         change_5d  = calc_hist_return(sym_hist, 5) if sym_hist is not None else None
         change_20d = calc_hist_return(sym_hist, 20) if sym_hist is not None else None
@@ -198,8 +231,8 @@ def fetch_yfinance_batch(symbols):
         result[sym] = {
             "price":      current,
             "prev_close": prev_close,
-            "high_52w":   info.get("fiftyTwoWeekHigh"),
-            "low_52w":    info.get("fiftyTwoWeekLow"),
+            "high_52w":   _clean(info.get("fiftyTwoWeekHigh")),
+            "low_52w":    _clean(info.get("fiftyTwoWeekLow")),
             "change_5d":  change_5d,
             "change_20d": change_20d,
             "vol_ratio":  vol_ratio,
@@ -207,7 +240,8 @@ def fetch_yfinance_batch(symbols):
         }
 
         if (i + 1) % 20 == 0:
-            logger.info("info 进度: %d/%d", i + 1, len(symbols))
+            has_hist = sum(1 for v in result.values() if v.get("change_5d") is not None)
+            logger.info("进度 %d/%d，有历史数据: %d", i + 1, len(symbols), has_hist)
 
     return result
 
@@ -215,9 +249,9 @@ def fetch_yfinance_batch(symbols):
 def apply_fallbacks(raw_data):
     for sym, fallback_list in TICKER_FALLBACKS.items():
         data = raw_data.get(sym, {})
-        price_ok  = data.get("price") is not None and data["price"] != 0
-        hist_ok   = data.get("change_5d") is not None
-        prev_ok   = data.get("prev_close") is not None
+        price_ok = _clean(data.get("price")) is not None
+        hist_ok  = data.get("change_5d") is not None
+        prev_ok  = _clean(data.get("prev_close")) is not None
         if price_ok and prev_ok and hist_ok:
             continue
 
@@ -234,19 +268,19 @@ def apply_fallbacks(raw_data):
                 fb_info = ticker.info
                 fb_hist = ticker.history(period="1mo")
 
-                p = fb_info.get("regularMarketPrice") or fb_info.get("currentPrice")
-                pc = fb_info.get("regularMarketPreviousClose") or fb_info.get("previousClose")
+                p  = _clean(fb_info.get("regularMarketPrice") or fb_info.get("currentPrice"))
+                pc = _clean(fb_info.get("regularMarketPreviousClose") or fb_info.get("previousClose"))
                 if pc is None and fb_hist is not None and len(fb_hist) >= 2:
-                    pc = float(fb_hist["Close"].iloc[-2])
+                    pc = _clean(fb_hist["Close"].iloc[-2])
                 if p is None and fb_hist is not None and len(fb_hist) >= 1:
-                    p = float(fb_hist["Close"].iloc[-1])
+                    p = _clean(fb_hist["Close"].iloc[-1])
 
-                if p and p != 0:
+                if p is not None and p != 0:
                     raw_data[sym] = {
                         "price": p,
                         "prev_close": pc,
-                        "high_52w": fb_info.get("fiftyTwoWeekHigh"),
-                        "low_52w": fb_info.get("fiftyTwoWeekLow"),
+                        "high_52w": _clean(fb_info.get("fiftyTwoWeekHigh")),
+                        "low_52w": _clean(fb_info.get("fiftyTwoWeekLow")),
                         "change_5d": calc_hist_return(fb_hist, 5) if fb_hist is not None else None,
                         "change_20d": calc_hist_return(fb_hist, 20) if fb_hist is not None else None,
                         "vol_ratio": None,
