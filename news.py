@@ -9,6 +9,7 @@ from email.mime.multipart import MIMEMultipart
 
 import yfinance as yf
 import requests
+from deep_translator import GoogleTranslator
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger(__name__)
@@ -54,6 +55,21 @@ def annotate(title, publisher):
     return "市场动态"
 
 
+def translate_summary(text, label):
+    """翻译英文摘要为中文，加标签前缀"""
+    prefix = f"[{label}] "
+    if not text or len(text.strip()) < 5:
+        return prefix
+    try:
+        result = GoogleTranslator(source="auto", target="zh-CN").translate(text)
+        if result and len(result) > 5:
+            return prefix + result
+    except Exception:
+        pass
+    # 翻译失败 → 保留英文原文
+    return prefix + text[:90]
+
+
 # ============================================================
 # 拉取新闻
 # ============================================================
@@ -97,19 +113,19 @@ def fetch_news(source_symbols, cutoff_start, cutoff_end):
                     continue
 
                 publisher = (content.get("provider", {}) or {}).get("displayName", "Unknown")
-                summary = content.get("summary", "") or content.get("description", "")
-                if not summary:
-                    summary = annotate(title, publisher)
-                # 截断过长摘要（中文约 30 字，英文约 80 字符）
-                if len(summary) > 80:
-                    summary = summary[:80] + "..."
+                raw_summary = content.get("summary", "") or content.get("description", "")
+                label = annotate(title, publisher)
+                # 翻译 + 标签前缀（截短英文原文以加速翻译）
+                short_text = (raw_summary or "").strip()[:200]
+                cn_summary = translate_summary(short_text, label)
+                time.sleep(0.15)
 
                 all_news.append({
                     "title": title,
                     "publisher": publisher,
                     "url": url,
                     "ts": pub_ts,
-                    "summary": summary,
+                    "summary": cn_summary,
                 })
 
             time.sleep(0.25)
