@@ -27,7 +27,7 @@ RECIPIENTS = [r.strip() for r in _RECIPIENTS_RAW.split(",") if r.strip()]
 BEIJING_TZ = timezone(timedelta(hours=8))
 
 NEWS_SOURCES = ["^GSPC", "^DJI", "^IXIC", "NVDA", "TSLA", "^HSI", "000001.SS",
-                "^N225", "^KS11", "FXI", "KWEB", "GC=F"]
+                "^N225", "^KS11", "0700.HK", "005930.KS", "GC=F"]
 
 # ============================================================
 # 一句话标注
@@ -255,8 +255,8 @@ def main():
         cutoff_end = today_start + 12 * 3600
         label = "午间金融要闻"
     else:
-        # 晚间: 今日 10:00 ～ 今日 20:00（覆盖亚洲收盘分析 + 美股盘前/早盘）
-        cutoff_start = today_start + 10 * 3600
+        # 晚间: 今日 8:00 ～ 今日 20:00（覆盖亚洲收盘分析 + 美股盘前/早盘）
+        cutoff_start = today_start + 8 * 3600
         cutoff_end = today_start + 20 * 3600
         label = "晚间金融要闻"
 
