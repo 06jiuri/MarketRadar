@@ -70,23 +70,22 @@ def fetch_news(source_symbols, cutoff_start, cutoff_end):
             if not news_list:
                 continue
             for item in news_list:
-                content = item.get("content", {})
-                url = content.get("canonicalUrl", {}).get("url", "")
+                url = item.get("link", "")
                 if not url or url in seen_urls:
                     continue
                 seen_urls.add(url)
 
-                title = content.get("title", "")
-                pub_time_raw = content.get("pubDate") or content.get("providerPublishTime", 0)
+                title = item.get("title", "")
+                pub_ts = item.get("providerPublishTime", 0)
                 try:
-                    pub_ts = int(pub_time_raw)
+                    pub_ts = int(pub_ts)
                 except (ValueError, TypeError):
                     pub_ts = 0
 
                 if pub_ts < cutoff_start or pub_ts > cutoff_end:
                     continue
 
-                publisher = content.get("provider", {}).get("displayName", "Unknown")
+                publisher = item.get("publisher", "Unknown")
                 all_news.append({
                     "title": title,
                     "publisher": publisher,
