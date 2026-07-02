@@ -5,6 +5,7 @@ on:
     - cron: '0 23 * * *'
     - cron: '0 4 * * *'
     - cron: '0 10 * * *'
+    - cron: '0 0 * * 0'
   workflow_dispatch:
     inputs:
       mode:
@@ -17,6 +18,7 @@ on:
           - morning
           - noon
           - evening
+          - weekly
 
 jobs:
   run:
@@ -32,17 +34,23 @@ jobs:
         id: decide
         run: |
           BJT=$(TZ='Asia/Shanghai' date +%H)
+          BJT_WEEKDAY=$(TZ='Asia/Shanghai' date +%w)
           MODE="${{ inputs.mode || 'auto' }}"
           if [ "$MODE" = "morning" ]; then
             echo "script=main" >> $GITHUB_OUTPUT
           elif [ "$MODE" = "noon" ] || [ "$MODE" = "evening" ]; then
             echo "script=news" >> $GITHUB_OUTPUT
+          elif [ "$MODE" = "weekly" ]; then
+            echo "script=weekly" >> $GITHUB_OUTPUT
+          elif [ "$BJT_WEEKDAY" = "0" ] && [ "$BJT" -le 9 ]; then
+            echo "script=weekly" >> $GITHUB_OUTPUT
           elif [ "$BJT" -lt 10 ]; then
             echo "script=main" >> $GITHUB_OUTPUT
           else
             echo "script=news" >> $GITHUB_OUTPUT
           fi
           echo "bjt_hour=$BJT" >> $GITHUB_OUTPUT
+          echo "bjt_weekday=$BJT_WEEKDAY" >> $GITHUB_OUTPUT
 
       - name: Run
         env:
@@ -50,8 +58,10 @@ jobs:
           SMTP_PASS: ${{ secrets.SMTP_PASS }}
           RECIPIENTS: ${{ secrets.RECIPIENTS }}
         run: |
-          echo "BJT hour: ${{ steps.decide.outputs.bjt_hour }}, script: ${{ steps.decide.outputs.script }}"
-          if [ "${{ steps.decide.outputs.script }}" = "main" ]; then
+          echo "BJT hour: ${{ steps.decide.outputs.bjt_hour }}, weekday: ${{ steps.decide.outputs.bjt_weekday }}, script: ${{ steps.decide.outputs.script }}"
+          if [ "${{ steps.decide.outputs.script }}" = "weekly" ]; then
+            python weekly.py
+          elif [ "${{ steps.decide.outputs.script }}" = "main" ]; then
             python main.py
           else
             python news.py

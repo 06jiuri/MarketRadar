@@ -9,6 +9,7 @@ from email.mime.multipart import MIMEMultipart
 
 import yfinance as yf
 import requests
+from deep_translator import GoogleTranslator
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger(__name__)
@@ -25,7 +26,8 @@ RECIPIENTS = [r.strip() for r in _RECIPIENTS_RAW.split(",") if r.strip()]
 
 BEIJING_TZ = timezone(timedelta(hours=8))
 
-NEWS_SOURCES = ["^GSPC", "^DJI", "^IXIC", "NVDA", "TSLA", "^HSI", "000001.SS", "GC=F"]
+NEWS_SOURCES = ["^GSPC", "^DJI", "^IXIC", "NVDA", "TSLA", "^HSI", "000001.SS",
+                "^N225", "^KS11", "BABA", "TSM", "000660.KS", "BIDU", "GC=F"]
 
 # ============================================================
 # 一句话标注
@@ -54,54 +56,94 @@ def annotate(title, publisher):
     return "市场动态"
 
 
+def translate_summary(text, label):
+    """翻译英文摘要为中文，加标签前缀"""
+    prefix = f"[{label}] "
+    if not text or len(text.strip()) < 5:
+        return prefix
+    try:
+        result = GoogleTranslator(source="auto", target="zh-CN").translate(text)
+        if result and len(result) > 5:
+            return prefix + result
+    except Exception:
+        pass
+    # 翻译失败 → 保留英文原文
+    return prefix + text[:90]
+
+
 # ============================================================
 # 拉取新闻
 # ============================================================
 
 def fetch_news(source_symbols, cutoff_start, cutoff_end):
-    """从 yfinance 拉取新闻，过滤时间窗口"""
     all_news = []
     seen_urls = set()
+    source_stats = {}
 
     for sym in source_symbols:
+        stats = {"raw": 0, "first_ts": ""}
+        source_news = []
         try:
             ticker = yf.Ticker(sym)
             news_list = ticker.news
+            stats["raw"] = len(news_list or [])
             if not news_list:
+                source_stats[sym] = stats
                 continue
             for item in news_list:
                 content = item.get("content", {})
-                url = content.get("canonicalUrl", {}).get("url", "")
+                url = (content.get("canonicalUrl", {}) or {}).get("url", "")
+                if not url:
+                    url = content.get("clickThroughUrl", {}).get("url", "")
                 if not url or url in seen_urls:
                     continue
                 seen_urls.add(url)
 
                 title = content.get("title", "")
-                pub_time_raw = content.get("pubDate") or content.get("providerPublishTime", 0)
-                try:
-                    pub_ts = int(pub_time_raw)
-                except (ValueError, TypeError):
-                    pub_ts = 0
+                pub_ts = 0
+                pub_date_str = content.get("pubDate", "")
+                if pub_date_str:
+                    try:
+                        s = pub_date_str.replace("Z", "+00:00")
+                        dt = datetime.fromisoformat(s)
+                        pub_ts = int(dt.timestamp())
+                    except Exception:
+                        pass
+                if not stats["first_ts"] and pub_date_str:
+                    stats["first_ts"] = pub_date_str[:16]
 
-                if pub_ts < cutoff_start or pub_ts > cutoff_end:
-                    continue
+                publisher = (content.get("provider", {}) or {}).get("displayName", "Unknown")
+                raw_summary = content.get("summary", "") or content.get("description", "")
+                label = annotate(title, publisher)
+                short_text = (raw_summary or "").strip()[:200]
+                cn_summary = translate_summary(short_text, label)
+                time.sleep(0.15)
 
-                publisher = content.get("provider", {}).get("displayName", "Unknown")
-                all_news.append({
-                    "title": title,
-                    "publisher": publisher,
-                    "url": url,
-                    "ts": pub_ts,
-                    "label": annotate(title, publisher),
+                source_news.append({
+                    "title": title, "publisher": publisher, "url": url,
+                    "ts": pub_ts, "summary": cn_summary,
                 })
-
-            time.sleep(0.25)
         except Exception as e:
             logger.warning("拉取 %s 新闻失败: %s", sym, e)
 
-    # 按时间倒序
+        source_stats[sym] = stats
+
+        # 按时间倒序，每个源取最近 3 条兜底 + 窗口内其余
+        source_news.sort(key=lambda x: x["ts"], reverse=True)
+        guaranteed = []
+        windowed = []
+        for item in source_news:
+            if len(guaranteed) < 3 and item["ts"] > 0:
+                guaranteed.append(item)
+            elif item["ts"] > 0 and cutoff_start <= item["ts"] <= cutoff_end:
+                windowed.append(item)
+
+        all_news.extend(guaranteed + windowed)
+        logger.info("  %s: raw=%d guaranteed=%d windowed=%d first_ts=%s",
+                    sym, stats["raw"], len(guaranteed), len(windowed), stats["first_ts"])
+
     all_news.sort(key=lambda x: x["ts"], reverse=True)
-    return all_news[:15]
+    return all_news[:25]
 
 
 # ============================================================
@@ -119,7 +161,8 @@ def render_html(news_items, period_label):
         <tr>
             <td class="news-item">
                 <div class="title">{n['title']}</div>
-                <div class="meta">{n['publisher']} · <span class="label">{n['label']}</span></div>
+                <div class="meta">{n['publisher']}</div>
+                <div class="summary">{n['summary']}</div>
                 <a class="link" href="{n['url']}">→ 阅读原文</a>
             </td>
         </tr>"""
@@ -140,8 +183,8 @@ body{{margin:0;padding:0;background:#e8e8e8;font-family:-apple-system,BlinkMacSy
 table{{width:100%;border-collapse:collapse}}
 td.news-item{{padding:12px 0;border-bottom:1px solid #eee}}
 .title{{font-size:14px;font-weight:600;line-height:1.4;margin-bottom:4px}}
-.meta{{font-size:11px;color:#999;margin-bottom:6px}}
-.label{{color:#1a1a2e;font-weight:600}}
+.meta{{font-size:11px;color:#999;margin-bottom:4px}}
+.summary{{font-size:13px;color:#555;line-height:1.5;margin-bottom:6px}}
 .link{{font-size:12px;color:#1a1a2e;text-decoration:none}}
 .footer{{padding:16px 20px;text-align:center;font-size:11px;color:#999;background:#f5f5f5}}
 @media(max-width:480px){{.header h1{{font-size:17px}}}}
@@ -203,12 +246,12 @@ def main():
         sys.exit(1)
 
     if hour < 15:
-        # 午间: 0:00-12:00
-        cutoff_start = today_start
+        # 午间: 昨日 18:00 ～ 今日 12:00（覆盖隔夜美盘 + 亚洲早盘）
+        cutoff_start = today_start - 6 * 3600
         cutoff_end = today_start + 12 * 3600
         label = "午间金融要闻"
     else:
-        # 晚间: 12:00-18:00
+        # 晚间: 今日 12:00 ～ 今日 18:00（下午发生）
         cutoff_start = today_start + 12 * 3600
         cutoff_end = today_start + 18 * 3600
         label = "晚间金融要闻"
