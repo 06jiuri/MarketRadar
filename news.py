@@ -116,11 +116,6 @@ def fetch_news(source_symbols, cutoff_start, cutoff_end):
                 if pub_ts == 0 or pub_ts < cutoff_start or pub_ts > cutoff_end:
                     continue
                 stats["filtered"] += 1
-                    except Exception:
-                        pass
-
-                if pub_ts == 0 or pub_ts < cutoff_start or pub_ts > cutoff_end:
-                    continue
 
                 publisher = (content.get("provider", {}) or {}).get("displayName", "Unknown")
                 raw_summary = content.get("summary", "") or content.get("description", "")
