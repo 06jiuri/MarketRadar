@@ -79,12 +79,14 @@ def fetch_news(source_symbols, cutoff_start, cutoff_end):
     """从 yfinance 拉取新闻，过滤时间窗口"""
     all_news = []
     seen_urls = set()
+    source_stats = {}  # {sym: {"raw": 0, "filtered": 0, "first_ts": ""}}
 
     for sym in source_symbols:
+        stats = {"raw": 0, "filtered": 0, "first_ts": ""}
         try:
             ticker = yf.Ticker(sym)
             news_list = ticker.news
-            logger.info("%s 返回 %d 条原始新闻", sym, len(news_list or []))
+            stats["raw"] = len(news_list or [])
             if not news_list:
                 continue
             for item in news_list:
@@ -98,7 +100,6 @@ def fetch_news(source_symbols, cutoff_start, cutoff_end):
 
                 title = content.get("title", "")
 
-                # pubDate 是 ISO 字符串如 '2026-07-01T13:38:34Z'，需转时间戳
                 pub_ts = 0
                 pub_date_str = content.get("pubDate", "")
                 if pub_date_str:
@@ -107,6 +108,14 @@ def fetch_news(source_symbols, cutoff_start, cutoff_end):
                         s = pub_date_str.replace("Z", "+00:00")
                         dt = datetime.fromisoformat(s)
                         pub_ts = int(dt.timestamp())
+                    except Exception:
+                        pass
+                if not stats["first_ts"] and pub_date_str:
+                    stats["first_ts"] = pub_date_str[:16]
+
+                if pub_ts == 0 or pub_ts < cutoff_start or pub_ts > cutoff_end:
+                    continue
+                stats["filtered"] += 1
                     except Exception:
                         pass
 
@@ -132,6 +141,14 @@ def fetch_news(source_symbols, cutoff_start, cutoff_end):
             time.sleep(0.25)
         except Exception as e:
             logger.warning("拉取 %s 新闻失败: %s", sym, e)
+        source_stats[sym] = stats
+
+    # 打印各源统计
+    logger.info("--- 各源过滤统计 ---")
+    for sym, st in sorted(source_stats.items()):
+        if st["raw"] > 0:
+            ft = st["first_ts"] or "N/A"
+            logger.info("  %s: raw=%d passed=%d first_ts=%s", sym, st["raw"], st["filtered"], ft)
 
     # 按时间倒序
     all_news.sort(key=lambda x: x["ts"], reverse=True)
