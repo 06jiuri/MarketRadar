@@ -67,8 +67,14 @@ def fetch_news(source_symbols, cutoff_start, cutoff_end):
         try:
             ticker = yf.Ticker(sym)
             news_list = ticker.news
+            logger.info("%s 返回 %d 条原始新闻", sym, len(news_list or []))
             if not news_list:
                 continue
+            # 打印第一条的结构用于调试
+            if news_list:
+                first = news_list[0]
+                logger.info("  [debug] keys: %s", list(first.keys())[:10])
+                logger.info("  [debug] ts=%s link=%s", first.get("providerPublishTime","?"), first.get("link","?"))
             for item in news_list:
                 url = item.get("link", "")
                 if not url or url in seen_urls:
