@@ -135,7 +135,7 @@ def fetch_news(source_symbols, cutoff_start, cutoff_end):
 
     # 按时间倒序
     all_news.sort(key=lambda x: x["ts"], reverse=True)
-    return all_news[:15]
+    return all_news[:20]
 
 
 # ============================================================
@@ -243,9 +243,9 @@ def main():
         cutoff_end = today_start + 12 * 3600
         label = "午间金融要闻"
     else:
-        # 晚间: 12:00-18:00
-        cutoff_start = today_start + 12 * 3600
-        cutoff_end = today_start + 18 * 3600
+        # 晚间: 今日 10:00 ～ 今日 20:00（覆盖亚洲收盘分析 + 美股盘前/早盘）
+        cutoff_start = today_start + 10 * 3600
+        cutoff_end = today_start + 20 * 3600
         label = "晚间金融要闻"
 
     logger.info("%s: 窗口 %d ～ %d", label, cutoff_start, cutoff_end)
