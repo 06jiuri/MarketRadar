@@ -507,6 +507,8 @@ def mark_sent(report_type):
 # ============================================================
 
 def main():
+    is_manual = os.environ.get("IS_MANUAL", "false") == "true"
+
     if already_sent("morning"):
         logger.info("晨报今日已发过，跳过")
         sys.exit(0)
@@ -600,7 +602,7 @@ def main():
     if not send_email(html):
         sys.exit(1)
 
-    mark_sent("morning")
+    mark_sent("morning") if not is_manual else None
 
 
 if __name__ == "__main__":
