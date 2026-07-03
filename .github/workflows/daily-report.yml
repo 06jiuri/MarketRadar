@@ -31,7 +31,6 @@ jobs:
         id: decide
         run: |
           BJT=$(TZ='Asia/Shanghai' date +%H)
-          BJT_MIN=$(TZ='Asia/Shanghai' date +%M)
           BJT_WEEKDAY=$(TZ='Asia/Shanghai' date +%w)
           MODE="${{ inputs.mode || 'auto' }}"
 
@@ -41,25 +40,22 @@ jobs:
             SCRIPT=news
           elif [ "$MODE" = "weekly" ]; then
             SCRIPT=weekly
-          elif [ "$BJT" = "07" ]; then
+          elif [ "$BJT" -ge 6 ] && [ "$BJT" -le 7 ]; then
             SCRIPT=main
-          elif [ "$BJT" = "12" ]; then
+          elif [ "$BJT" -ge 11 ] && [ "$BJT" -le 12 ]; then
             SCRIPT=news
-          elif [ "$BJT" = "18" ]; then
+          elif [ "$BJT" -ge 17 ] && [ "$BJT" -le 18 ]; then
             SCRIPT=news
-          elif [ "$BJT_WEEKDAY" = "0" ] && [ "$BJT" = "08" ]; then
+          elif [ "$BJT_WEEKDAY" = "0" ] && [ "$BJT" -ge 8 ] && [ "$BJT" -le 9 ]; then
             SCRIPT=weekly
           else
             SCRIPT=skip
           fi
 
           if [ "$SCRIPT" = "skip" ]; then
-            echo "Skipping at BJT ${BJT}:${BJT_MIN} weekday=${BJT_WEEKDAY}"
             echo "script=skip" >> $GITHUB_OUTPUT
           else
             echo "script=${SCRIPT}" >> $GITHUB_OUTPUT
-            echo "bjt_hour=${BJT}" >> $GITHUB_OUTPUT
-            echo "bjt_weekday=${BJT_WEEKDAY}" >> $GITHUB_OUTPUT
           fi
 
       - name: Run or skip
@@ -67,11 +63,11 @@ jobs:
           SMTP_USER: ${{ secrets.SMTP_USER }}
           SMTP_PASS: ${{ secrets.SMTP_PASS }}
           RECIPIENTS: ${{ secrets.RECIPIENTS }}
+          GH_PAT: ${{ secrets.GH_PAT }}
         run: |
           if [ "${{ steps.decide.outputs.script }}" = "skip" ]; then
             exit 0
           fi
-          echo "BJT hour=${{ steps.decide.outputs.bjt_hour }}, script=${{ steps.decide.outputs.script }}"
           if [ "${{ steps.decide.outputs.script }}" = "weekly" ]; then
             python weekly.py
           elif [ "${{ steps.decide.outputs.script }}" = "main" ]; then
