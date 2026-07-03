@@ -292,8 +292,20 @@ def main():
     today_start = int(now.replace(hour=0, minute=0, second=0, microsecond=0).timestamp())
     hour = now.hour
 
-    # 判断类型
-    if hour <= 12:
+    force_mode = os.environ.get("REPORT_TYPE", "")
+    is_manual = os.environ.get("IS_MANUAL", "false") == "true"
+
+    if force_mode in ("noon", "evening"):
+        report_type = force_mode
+        if force_mode == "noon":
+            cutoff_start = today_start - 6 * 3600
+            cutoff_end = today_start + 12 * 3600
+            label = "午间金融要闻"
+        else:
+            cutoff_start = today_start + 12 * 3600
+            cutoff_end = today_start + 18 * 3600
+            label = "晚间金融要闻"
+    elif hour <= 12:
         report_type = "noon"
         cutoff_start = today_start - 6 * 3600
         cutoff_end = today_start + 12 * 3600
@@ -320,7 +332,7 @@ def main():
     if not send_email(html, label):
         sys.exit(1)
 
-    mark_sent(report_type)
+    mark_sent(report_type) if not is_manual else None
 
 
 if __name__ == "__main__":
