@@ -31,6 +31,7 @@ jobs:
         id: decide
         run: |
           BJT=$(TZ='Asia/Shanghai' date +%H)
+          BJT_MIN=$(TZ='Asia/Shanghai' date +%M)
           BJT_WEEKDAY=$(TZ='Asia/Shanghai' date +%w)
           MODE="${{ inputs.mode || 'auto' }}"
 
@@ -40,6 +41,7 @@ jobs:
             SCRIPT=news
           elif [ "$MODE" = "weekly" ]; then
             SCRIPT=weekly
+<<<<<<< HEAD
           elif [ "$BJT" -ge 6 ] && [ "$BJT" -le 7 ]; then
             SCRIPT=main
           elif [ "$BJT" -ge 11 ] && [ "$BJT" -le 12 ]; then
@@ -47,15 +49,33 @@ jobs:
           elif [ "$BJT" -ge 17 ] && [ "$BJT" -le 18 ]; then
             SCRIPT=news
           elif [ "$BJT_WEEKDAY" = "0" ] && [ "$BJT" -ge 8 ] && [ "$BJT" -le 9 ]; then
+=======
+          elif [ "$BJT" = "07" ]; then
+            SCRIPT=main
+          elif [ "$BJT" = "12" ]; then
+            SCRIPT=news
+          elif [ "$BJT" = "18" ]; then
+            SCRIPT=news
+          elif [ "$BJT_WEEKDAY" = "0" ] && [ "$BJT" = "08" ]; then
+>>>>>>> 6764f8725762af99e81897f7041ffd460aa44593
             SCRIPT=weekly
           else
             SCRIPT=skip
           fi
 
           if [ "$SCRIPT" = "skip" ]; then
+<<<<<<< HEAD
             echo "script=skip" >> $GITHUB_OUTPUT
           else
             echo "script=${SCRIPT}" >> $GITHUB_OUTPUT
+=======
+            echo "Skipping at BJT ${BJT}:${BJT_MIN} weekday=${BJT_WEEKDAY}"
+            echo "script=skip" >> $GITHUB_OUTPUT
+          else
+            echo "script=${SCRIPT}" >> $GITHUB_OUTPUT
+            echo "bjt_hour=${BJT}" >> $GITHUB_OUTPUT
+            echo "bjt_weekday=${BJT_WEEKDAY}" >> $GITHUB_OUTPUT
+>>>>>>> 6764f8725762af99e81897f7041ffd460aa44593
           fi
 
       - name: Run or skip
@@ -68,6 +88,10 @@ jobs:
           if [ "${{ steps.decide.outputs.script }}" = "skip" ]; then
             exit 0
           fi
+<<<<<<< HEAD
+=======
+          echo "BJT hour=${{ steps.decide.outputs.bjt_hour }}, script=${{ steps.decide.outputs.script }}"
+>>>>>>> 6764f8725762af99e81897f7041ffd460aa44593
           if [ "${{ steps.decide.outputs.script }}" = "weekly" ]; then
             python weekly.py
           elif [ "${{ steps.decide.outputs.script }}" = "main" ]; then

@@ -2,6 +2,8 @@ import os
 import sys
 import time
 import math
+import json
+import base64
 import smtplib
 import logging
 from datetime import datetime
@@ -450,10 +452,64 @@ def send_email(html_content):
 
 
 # ============================================================
+# 发送状态
+# ============================================================
+
+_STATE_API = "https://api.github.com/repos/06jiuri/shichang/contents/state.json"
+_BEIJING_TZ = None  # lazy init
+
+
+def _today_str():
+    from datetime import timezone as tz, timedelta
+    return datetime.now(tz(timedelta(hours=8))).strftime("%Y%m%d")
+
+
+def _state_headers():
+    t = os.environ.get("GH_PAT", "")
+    return {'Authorization': f'Bearer {t}', 'Accept': 'application/vnd.github+json'}
+
+
+def already_sent(report_type):
+    try:
+        h = _state_headers()
+        r = requests.get(_STATE_API, headers=h)
+        if r.status_code == 200:
+            state = json.loads(base64.b64decode(r.json()['content']).decode())
+            return state.get(report_type) == _today_str()
+    except Exception:
+        pass
+    return False
+
+
+def mark_sent(report_type):
+    try:
+        today = _today_str()
+        h = _state_headers()
+        r = requests.get(_STATE_API, headers=h)
+        sha, state = None, {}
+        if r.status_code == 200:
+            sha = r.json()['sha']
+            state = json.loads(base64.b64decode(r.json()['content']).decode())
+        state[report_type] = today
+        payload = {
+            'message': f'state: {report_type} {today}',
+            'content': base64.b64encode(json.dumps(state).encode()).decode(),
+        }
+        if sha:
+            payload['sha'] = sha
+        requests.put(_STATE_API, headers=h, json=payload)
+    except Exception:
+        pass
+
+
+# ============================================================
 # 主流程
 # ============================================================
 
 def main():
+    if already_sent("morning"):
+        logger.info("晨报今日已发过，跳过")
+        sys.exit(0)
     # 1. 收集所有 yfinance symbols
     all_categories = [
         MARKET_INDICATORS, FOREX, INDEXES, APAC_INDEXES, EUROPE,
@@ -543,6 +599,8 @@ def main():
     logger.info("HTML 渲染完成")
     if not send_email(html):
         sys.exit(1)
+
+    mark_sent("morning")
 
 
 if __name__ == "__main__":
