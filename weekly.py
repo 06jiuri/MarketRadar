@@ -274,6 +274,8 @@ def mark_sent(report_type):
 # ============================================================
 
 def main():
+    is_manual = os.environ.get("IS_MANUAL", "false") == "true"
+
     if already_sent("weekly"):
         logger.info("周报今日已发过，跳过")
         sys.exit(0)
@@ -323,7 +325,7 @@ def main():
     if not send_email(html, week_str):
         sys.exit(1)
 
-    mark_sent("weekly")
+    mark_sent("weekly") if not is_manual else None
 
 
 if __name__ == "__main__":
