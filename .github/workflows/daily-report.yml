@@ -1,14 +1,6 @@
 name: Daily Market Report
 
 on:
-<<<<<<< HEAD
-=======
-  schedule:
-    - cron: '0 23 * * *'
-    - cron: '0 4 * * *'
-    - cron: '0 10 * * *'
-    - cron: '0 0 * * 0'
->>>>>>> 078653060103cf5fb1660d3f3b2f95f6a124fba4
   workflow_dispatch:
     inputs:
       mode:
@@ -43,53 +35,19 @@ jobs:
           MODE="${{ inputs.mode || 'auto' }}"
           EVENT="${{ github.event_name }}"
           DISPATCH_TYPE="${{ github.event.action }}"
-
-<<<<<<< HEAD
-=======
-          # 判断是否手动触发
->>>>>>> 078653060103cf5fb1660d3f3b2f95f6a124fba4
-          if [ "$EVENT" = "workflow_dispatch" ] && [ "$MODE" != "auto" ]; then
-            IS_MANUAL=true
-          else
-            IS_MANUAL=false
-          fi
-
-<<<<<<< HEAD
-=======
-          # repository_dispatch 事件直接拿 type
->>>>>>> 078653060103cf5fb1660d3f3b2f95f6a124fba4
-          if [ "$EVENT" = "repository_dispatch" ]; then
-            RPT="${DISPATCH_TYPE}"
-            if [ "$RPT" = "morning" ]; then SCRIPT=main
-            elif [ "$RPT" = "weekly" ]; then SCRIPT=weekly
-            else SCRIPT=news; fi
-          elif [ "$MODE" = "morning" ]; then
-            SCRIPT=main; RPT=morning
-          elif [ "$MODE" = "noon" ]; then
-            SCRIPT=news; RPT=noon
-          elif [ "$MODE" = "evening" ]; then
-            SCRIPT=news; RPT=evening
-          elif [ "$MODE" = "weekly" ]; then
-            SCRIPT=weekly; RPT=weekly
-          elif [ "$BJT" -ge 6 ] && [ "$BJT" -le 7 ]; then
-            SCRIPT=main; RPT=morning
-          elif [ "$BJT" -ge 11 ] && [ "$BJT" -le 12 ]; then
-            SCRIPT=news; RPT=noon
-          elif [ "$BJT" -ge 17 ] && [ "$BJT" -le 18 ]; then
-            SCRIPT=news; RPT=evening
-          elif [ "$BJT_WEEKDAY" = "0" ] && [ "$BJT" -ge 8 ] && [ "$BJT" -le 9 ]; then
-            SCRIPT=weekly; RPT=weekly
-          else
-            SCRIPT=skip; RPT=skip
-          fi
-
-          if [ "$SCRIPT" = "skip" ]; then
-            echo "script=skip" >> $GITHUB_OUTPUT
-          else
-            echo "script=${SCRIPT}" >> $GITHUB_OUTPUT
-            echo "report_type=${RPT}" >> $GITHUB_OUTPUT
-            echo "is_manual=${IS_MANUAL}" >> $GITHUB_OUTPUT
-          fi
+          if [ "${EVENT}" = "workflow_dispatch" ] && [ "${MODE}" != "auto" ]; then IS_MANUAL=true; else IS_MANUAL=false; fi
+          if [ "${EVENT}" = "repository_dispatch" ]; then RPT="${DISPATCH_TYPE}"; if [ "${RPT}" = "morning" ]; then SCRIPT=main; elif [ "${RPT}" = "weekly" ]; then SCRIPT=weekly; else SCRIPT=news; fi
+          elif [ "${MODE}" = "morning" ]; then SCRIPT=main; RPT=morning
+          elif [ "${MODE}" = "noon" ]; then SCRIPT=news; RPT=noon
+          elif [ "${MODE}" = "evening" ]; then SCRIPT=news; RPT=evening
+          elif [ "${MODE}" = "weekly" ]; then SCRIPT=weekly; RPT=weekly
+          elif [ "${BJT}" -ge 6 ] && [ "${BJT}" -le 7 ]; then SCRIPT=main; RPT=morning
+          elif [ "${BJT}" -ge 11 ] && [ "${BJT}" -le 12 ]; then SCRIPT=news; RPT=noon
+          elif [ "${BJT}" -ge 17 ] && [ "${BJT}" -le 18 ]; then SCRIPT=news; RPT=evening
+          elif [ "${BJT_WEEKDAY}" = "0" ] && [ "${BJT}" -ge 8 ] && [ "${BJT}" -le 9 ]; then SCRIPT=weekly; RPT=weekly
+          else SCRIPT=skip; RPT=skip; fi
+          if [ "${SCRIPT}" = "skip" ]; then echo "script=skip" >> ${GITHUB_OUTPUT}
+          else echo "script=${SCRIPT}" >> ${GITHUB_OUTPUT}; echo "report_type=${RPT}" >> ${GITHUB_OUTPUT}; echo "is_manual=${IS_MANUAL}" >> ${GITHUB_OUTPUT}; fi
 
       - name: Run or skip
         env:
@@ -100,13 +58,7 @@ jobs:
           REPORT_TYPE: ${{ steps.decide.outputs.report_type }}
           IS_MANUAL: ${{ steps.decide.outputs.is_manual }}
         run: |
-          if [ "${{ steps.decide.outputs.script }}" = "skip" ]; then
-            exit 0
-          fi
-          if [ "${{ steps.decide.outputs.script }}" = "weekly" ]; then
-            python weekly.py
-          elif [ "${{ steps.decide.outputs.script }}" = "main" ]; then
-            python main.py
-          else
-            python news.py
-          fi
+          if [ "${{ steps.decide.outputs.script }}" = "skip" ]; then exit 0; fi
+          if [ "${{ steps.decide.outputs.script }}" = "weekly" ]; then python weekly.py
+          elif [ "${{ steps.decide.outputs.script }}" = "main" ]; then python main.py
+          else python news.py; fi
