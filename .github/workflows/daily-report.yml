@@ -3,13 +3,9 @@ name: Daily Market Report
 on:
   schedule:
     - cron: '0 23 * * *'
-    - cron: '30 23 * * *'
     - cron: '0 4 * * *'
-    - cron: '30 4 * * *'
     - cron: '0 10 * * *'
-    - cron: '30 10 * * *'
     - cron: '0 0 * * 0'
-    - cron: '30 0 * * 0'
   workflow_dispatch:
     inputs:
       mode:
@@ -23,6 +19,8 @@ on:
           - noon
           - evening
           - weekly
+  repository_dispatch:
+    types: [morning, noon, evening, weekly]
 
 jobs:
   run:
@@ -41,14 +39,22 @@ jobs:
           BJT_WEEKDAY=$(TZ='Asia/Shanghai' date +%w)
           MODE="${{ inputs.mode || 'auto' }}"
           EVENT="${{ github.event_name }}"
+          DISPATCH_TYPE="${{ github.event.action }}"
 
+          # 判断是否手动触发
           if [ "$EVENT" = "workflow_dispatch" ] && [ "$MODE" != "auto" ]; then
             IS_MANUAL=true
           else
             IS_MANUAL=false
           fi
 
-          if [ "$MODE" = "morning" ]; then
+          # repository_dispatch 事件直接拿 type
+          if [ "$EVENT" = "repository_dispatch" ]; then
+            RPT="${DISPATCH_TYPE}"
+            if [ "$RPT" = "morning" ]; then SCRIPT=main
+            elif [ "$RPT" = "weekly" ]; then SCRIPT=weekly
+            else SCRIPT=news; fi
+          elif [ "$MODE" = "morning" ]; then
             SCRIPT=main; RPT=morning
           elif [ "$MODE" = "noon" ]; then
             SCRIPT=news; RPT=noon
