@@ -455,7 +455,7 @@ def send_email(html_content):
 # 发送状态
 # ============================================================
 
-_STATE_API = "https://api.github.com/repos/06jiuri/shichang/contents/state.json"
+_STATE_API = "https://api.github.com/repos/06jiuri/MarketRadar/contents/state.json"
 _BEIJING_TZ = None  # lazy init
 
 
