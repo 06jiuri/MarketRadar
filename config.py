@@ -129,6 +129,11 @@ CHINA_STOCKS = [
     {"name": "中国平安",   "symbol": "601318.SS", "unit": "¥"},
     {"name": "宁德时代",   "symbol": "300750.SZ", "unit": "¥"},
     {"name": "比亚迪",     "symbol": "002594.SZ", "unit": "¥"},
+    {"name": "有研硅",     "symbol": "688432.SS", "unit": "¥"},
+    {"name": "华天科技",     "symbol": "002185.SZ", "unit": "¥"},
+    {"name": "兴业股份",     "symbol": "603928.SS", "unit": "¥"},
+    {"name": "济民健康",     "symbol": "603222.SS", "unit": "¥"},
+    
 ]
 CHINA_STOCKS_NOTE = "基于昨日收盘数据"
 
